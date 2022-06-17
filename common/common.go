@@ -347,7 +347,7 @@ func stopIngestor() {
 // BlockIngestor runs as a goroutine and polls zcashd for new blocks, adding them
 // to the cache. The repetition count, rep, is nonzero only for unit-testing.
 func BlockIngestor(c *BlockCache, rep int) {
-	lastLog := Time.Now()
+	// lastLog := Time.Now()
 	lastHeightLogged := 0
 
 	// Start listening for new blocks
@@ -355,10 +355,12 @@ func BlockIngestor(c *BlockCache, rep int) {
 		// stop if requested
 		select {
 		case <-stopIngestorChan:
+			Log.Info("Stop requested")
 			return
 		default:
 		}
 
+		Log.Info("Getting best block hash...")
 		result, err := RawRequest("getbestblockhash", []json.RawMessage{})
 		if err != nil {
 			Log.WithFields(logrus.Fields{
@@ -375,8 +377,11 @@ func BlockIngestor(c *BlockCache, rep int) {
 		if err != nil {
 			Log.Fatal("error decoding getbestblockhash", err, hashHex)
 		}
+		Log.Info("Got best block hash", string(lastBestBlockHash))
 
+		Log.Info("Getting next height...")
 		height := c.GetNextHeight()
+		Log.Info("Next height:", height)
 		if string(lastBestBlockHash) == string(parser.Reverse(c.GetLatestHash())) {
 			// Synced
 			c.Sync()
@@ -385,23 +390,25 @@ func BlockIngestor(c *BlockCache, rep int) {
 				Log.Info("Waiting for block: ", height)
 			}
 			Time.Sleep(2 * time.Second)
-			lastLog = Time.Now()
+			// lastLog = Time.Now()
 			continue
 		}
+		Log.Info("Requesting block", height)
 		var block *walletrpc.CompactBlock
 		block, err = getBlockFromRPC(height)
 		if err != nil {
 			Log.Fatal("getblock failed, will retry", err)
 		}
+		Log.Info("Got block", height)
 		if block != nil && c.HashMatch(block.PrevHash) {
 			if err = c.Add(height, block); err != nil {
 				Log.Fatal("Cache add failed:", err)
 			}
 			// Don't log these too often.
-			if DarksideEnabled || Time.Now().Sub(lastLog).Seconds() >= 4 {
-				lastLog = Time.Now()
-				Log.Info("Adding block to cache ", height, " ", displayHash(block.Hash))
-			}
+			// if DarksideEnabled || Time.Now().Sub(lastLog).Seconds() >= 4 {
+			// lastLog = Time.Now()
+			Log.Info("Adding block to cache ", height, " ", displayHash(block.Hash))
+			// }
 			continue
 		}
 		if height == c.GetFirstHeight() {
